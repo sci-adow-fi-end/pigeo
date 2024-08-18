@@ -53,7 +53,7 @@ fn main() -> std::io::Result<()> {
                     .collect::<String>()
             );
 
-            let response = b"Messaggio ricevuto!";
+            let response = b"message saved";
             stream.write_all(response).unwrap();
 
             println!(
