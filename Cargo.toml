@@ -1,7 +1,9 @@
 [package]
 name = "pigeo"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 
 [dependencies]
-openssl = "0.10.66"
+openssl = { version = "0.10.66", features = ["vendored"] }
+log = "0.4.22"
+simple_logger = "5.0.0"
