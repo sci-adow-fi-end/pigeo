@@ -8,8 +8,9 @@ use std::net::TcpStream;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
-
-//use std::time::Duration;
+mod client;
+mod comunication;
+mod server;
 
 fn main() {
     //init of the logger
@@ -24,7 +25,6 @@ fn main() {
 
         let _response: bool = rx.recv().unwrap();
         let mut connector_builder = SslConnector::builder(SslMethod::tls()).unwrap();
-        // FIXME do things proprely
 
         connector_builder.set_ca_file("certs.pem").unwrap();
         info!("you are using a self signed certificate, only for testing pourposes");
@@ -115,7 +115,7 @@ fn main() {
 
                     thread::spawn(move || {
                         let mut stream = acceptor.accept(stream).unwrap();
-                        let mut buffer = [0; 1024]; // buffer di 1024 byte
+                        let mut buffer = [0; 1024];
                         let bytes_read = stream.read(&mut buffer).unwrap();
 
                         println!(
