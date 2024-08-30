@@ -13,6 +13,7 @@ use std::path::Path;
 
 enum RegistrationError {
     BadUsername,
+    ServerError,
     Unknown,
 }
 
@@ -20,6 +21,7 @@ enum SendError {
     BadUsername,
     BadPassword,
     BadReceiver,
+    ServerError,
     Unknown,
 }
 
@@ -27,6 +29,7 @@ enum ReceiveError {
     BadUsername,
     BadPassword,
     BadSender,
+    ServerError,
     Unknown,
 }
 
@@ -165,6 +168,8 @@ impl Client {
                                 }
 
                                 Answer::Messages(_mess) => Err(RegistrationError::Unknown),
+
+                                Answer::ServerError => Err(RegistrationError::ServerError),
                             },
                         };
                     }
@@ -258,6 +263,8 @@ impl Client {
                                 Answer::BadSender => Err(SendError::Unknown),
 
                                 Answer::Messages(_mess) => Err(SendError::Unknown),
+
+                                Answer::ServerError => Err(SendError::ServerError),
                             },
                         };
                     }
@@ -350,6 +357,8 @@ impl Client {
                                 Answer::BadReceiver => Err(ReceiveError::Unknown),
 
                                 Answer::Messages(mess) => Ok(mess),
+
+                                Answer::ServerError => Err(ReceiveError::ServerError),
                             },
                         };
                     }

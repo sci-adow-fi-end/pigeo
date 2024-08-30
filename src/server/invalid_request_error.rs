@@ -11,6 +11,8 @@ pub enum InvalidRequestError {
     BadSender,
     #[error("the inserted receiver is not valid")]
     BadReceiver,
+    #[error("the database had an unknown error")]
+    DatabaseError,
 }
 impl InvalidRequestError {
     pub fn into_answer(&self) -> Answer {
@@ -19,6 +21,7 @@ impl InvalidRequestError {
             Self::BadPassword => Answer::BadPwd,
             Self::BadSender => Answer::BadSender,
             Self::BadReceiver => Answer::BadReceiver,
+            Self::DatabaseError => Answer::ServerError,
         };
     }
 }

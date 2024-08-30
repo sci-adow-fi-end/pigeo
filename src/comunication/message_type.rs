@@ -37,6 +37,7 @@ pub enum Answer {
     BadPwd,
     BadSender,
     BadReceiver,
+    ServerError,
     Messages(Vec<String>),
 }
 

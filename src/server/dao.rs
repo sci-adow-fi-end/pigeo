@@ -3,10 +3,10 @@ use log::warn;
 use postgres::{Client, Error, GenericClient, NoTls};
 use std::io::Result;
 
-struct dao {
+struct DAO {
     db_client: Client,
 }
-impl dao {
+impl DAO {
     fn init_connection() -> Option<Self> {
         let connection = Client::connect(
             "host=localhost user=postgres password=secret dbname=mydb",
@@ -49,7 +49,7 @@ impl dao {
                                 warn!("error creating the table messages");
                                 None
                             }
-                            Ok(_res) => Some(dao { db_client: client }),
+                            Ok(_res) => Some(DAO { db_client: client }),
                         }
                     }
                 }
@@ -66,9 +66,10 @@ impl dao {
         match client.execute(
             "INSERT INTO users (username, password, pubkey) VALUES ($1, $2, $3)",
             &[&username, &password, &pubkey],
-        )
-            Ok(_res)=>{Ok()},
-            Err(e)=>{Err}
+        ) {
+            Ok(_res) => Ok(),
+            InvalidRequestError::Err(e) => Err(),
+        }
     }
 
     fn validate_credentials(username: String, password: String) -> Result<(), InvalidRequestError> {
