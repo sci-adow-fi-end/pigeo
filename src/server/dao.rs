@@ -1,15 +1,15 @@
 use crate::{client::client, server::invalid_request_error::InvalidRequestError};
-use log::warn;
+use log::{info, warn};
 use postgres::{Client, Error, GenericClient, NoTls};
-use std::io::Result;
+use std::result::Result;
 
-struct DAO {
+pub struct DAO {
     db_client: Client,
 }
 impl DAO {
-    fn init_connection() -> Option<Self> {
+    pub fn init_connection() -> Option<Self> {
         let connection = Client::connect(
-            "host=localhost user=postgres password=secret dbname=mydb",
+            "host=localhost user=postgres password=Mind dbname=pigeo",
             NoTls,
         );
         return match connection {
@@ -49,7 +49,10 @@ impl DAO {
                                 warn!("error creating the table messages");
                                 None
                             }
-                            Ok(_res) => Some(DAO { db_client: client }),
+                            Ok(_res) => {
+                                info!("database initialized succesfully");
+                                Some(DAO { db_client: client })
+                            }
                         }
                     }
                 }
@@ -57,18 +60,33 @@ impl DAO {
         };
     }
 
-    fn save_user(
-        &self,
+    pub fn is_name_present(&mut self, username: String) -> Result<bool, InvalidRequestError> {
+        match self.db_client.query(
+            "SELECT username 
+                    FROM users
+                    WHERE username = $1",
+            &[&username],
+        ) {
+            Ok(rows) => {
+                let available: bool = !rows.is_empty();
+                Ok(available)
+            }
+            Err(_e) => Err(InvalidRequestError::DatabaseError),
+        }
+    }
+
+    pub fn save_user(
+        &mut self,
         username: String,
         password: String,
         pubkey: String,
     ) -> Result<(), InvalidRequestError> {
-        match client.execute(
+        match self.db_client.execute(
             "INSERT INTO users (username, password, pubkey) VALUES ($1, $2, $3)",
             &[&username, &password, &pubkey],
         ) {
-            Ok(_res) => Ok(),
-            InvalidRequestError::Err(e) => Err(),
+            Ok(_res) => Ok(()),
+            Err(_e) => Err(InvalidRequestError::DatabaseError),
         }
     }
 
@@ -76,23 +94,38 @@ impl DAO {
         todo!()
     }
 
-    fn save_message(
-        &self,
-        username: String,
-        password: String,
+    pub fn save_message(
+        &mut self,
         message: String,
+        sender: String,
         receiver: String,
     ) -> Result<(), InvalidRequestError> {
-        todo!();
+        match self.db_client.execute(
+            "INSERT INTO messages (message, sender, receiver) VALUES ($1, $2, $3)",
+            &[&message, &sender, &receiver],
+        ) {
+            Ok(_res) => Ok(()),
+            Err(_e) => Err(InvalidRequestError::DatabaseError),
+        }
     }
 
-    fn get_messages_by_receiver(
-        &self,
-        username: String,
-        password: String,
+    pub fn get_messages_by_sender_receiver(
+        &mut self,
+        sender: String,
         receiver: String,
     ) -> Result<Vec<String>, InvalidRequestError> {
-        todo!();
+        match self.db_client.query(
+            "SELECT message 
+                    FROM messages
+                    WHERE sender = $1 AND receiver = $2",
+            &[&sender, &receiver],
+        ) {
+            Ok(rows) => {
+                let messages: Vec<String> = rows.iter().map(|row| row.get("message")).collect();
+                Ok(messages)
+            }
+            Err(_e) => Err(InvalidRequestError::DatabaseError),
+        }
     }
 }
 

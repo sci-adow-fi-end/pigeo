@@ -13,6 +13,19 @@ mod comunication;
 mod server;
 
 fn main() {
+    SimpleLogger::new().init().unwrap();
+    let server = match server::server::Server::init_connection() {
+        None => {
+            panic!();
+        }
+        Some(res) => res,
+    };
+
+    server.listen();
+}
+
+/*
+fn main() {
     //init of the logger
     SimpleLogger::new().init().unwrap();
 
@@ -152,3 +165,4 @@ fn main() {
     server.join().unwrap();
     client.join().unwrap();
 }
+*/

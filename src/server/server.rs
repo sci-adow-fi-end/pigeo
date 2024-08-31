@@ -1,41 +1,42 @@
+use crate::server::dao::DAO;
 use log::{info, warn};
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::Arc;
 use std::thread;
-
-struct Server {
+pub struct Server {
+    server_dao: DAO,
     connection_listener: TcpListener,
     conncetion_acceptor: Arc<SslAcceptor>,
 }
 impl Server {
-    fn new() -> Self {
+    pub fn init_connection() -> Option<Self> {
         let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
 
         match acceptor.set_private_key_file("key.pem", SslFiletype::PEM) {
             Ok(_res) => {}
             Err(_e) => {
                 warn!("key file not found");
-                panic!();
+                return None;
             }
-        }
+        };
 
         match acceptor.set_certificate_chain_file("certs.pem") {
             Ok(_res) => {}
             Err(_e) => {
                 warn!("certificate file not found");
-                panic!();
+                return None;
             }
-        }
+        };
 
         match acceptor.check_private_key() {
             Ok(_res) => {}
             Err(_e) => {
                 warn!("private key not valid");
-                panic!();
+                return None;
             }
-        }
+        };
 
         let acceptor = Arc::new(acceptor.build());
 
@@ -43,16 +44,26 @@ impl Server {
             Ok(res) => res,
             Err(_e) => {
                 warn!("the server cannot bind correctly");
-                panic!();
+                return None;
             }
         };
-        Server {
+
+        let dao = match DAO::init_connection() {
+            Some(res) => res,
+            None => {
+                warn!("the database cannot be connected");
+                return None;
+            }
+        };
+
+        Some(Server {
+            server_dao: dao,
             connection_listener: listener,
             conncetion_acceptor: acceptor,
-        }
+        })
     }
 
-    fn listen(self) {
+    pub fn listen(self) {
         for stream in self.connection_listener.incoming() {
             match stream {
                 Ok(stream) => {
