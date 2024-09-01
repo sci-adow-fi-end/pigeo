@@ -129,4 +129,14 @@ impl DAO {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::DAO;
+
+    #[test]
+    fn test_init_connection() {
+        assert!(DAO::init_connection().is_some())
+    }
+}
+
 // # TODO implement stuff
