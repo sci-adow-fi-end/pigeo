@@ -11,13 +11,13 @@ use std::io::{self, Write};
 use std::net::TcpStream;
 use std::path::Path;
 
-enum RegistrationError {
+pub enum RegistrationError {
     BadUsername,
     ServerError,
     Unknown,
 }
 
-enum SendError {
+pub enum SendError {
     BadUsername,
     BadPassword,
     BadReceiver,
@@ -25,7 +25,7 @@ enum SendError {
     Unknown,
 }
 
-enum ReceiveError {
+pub enum ReceiveError {
     BadUsername,
     BadPassword,
     BadSender,
@@ -33,7 +33,7 @@ enum ReceiveError {
     Unknown,
 }
 
-struct Client {
+pub struct Client {
     connector: SslConnector,
     stream: SslStream<TcpStream>,
     private_key: String,
@@ -41,7 +41,7 @@ struct Client {
 }
 
 impl Client {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut connector_builder = SslConnector::builder(SslMethod::tls()).unwrap();
 
         connector_builder.set_ca_file("certs.pem").unwrap();
@@ -97,7 +97,11 @@ impl Client {
         }
     }
 
-    fn register(&mut self, username: String, password: String) -> Result<(), RegistrationError> {
+    pub fn register(
+        &mut self,
+        username: String,
+        password: String,
+    ) -> Result<(), RegistrationError> {
         let req = Request::Register {
             username,
             password,
@@ -178,7 +182,7 @@ impl Client {
         }
     }
 
-    fn send(
+    pub fn send(
         &mut self,
         username: String,
         password: String,
@@ -273,7 +277,7 @@ impl Client {
         }
     }
 
-    fn receive(
+    pub fn receive(
         &mut self,
         username: String,
         password: String,

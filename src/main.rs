@@ -1,27 +1,85 @@
-use core::panic;
-use log::{info, warn};
-use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
 use simple_logger::SimpleLogger;
-use std::io::{Read, Write};
-use std::net::TcpListener;
-use std::net::TcpStream;
-use std::sync::mpsc;
-use std::sync::Arc;
-use std::thread;
+use std::io;
 mod client;
 mod comunication;
 mod server;
 
 fn main() {
     SimpleLogger::new().init().unwrap();
-    let server = match server::server::Server::init_connection() {
-        None => {
-            panic!();
-        }
-        Some(res) => res,
-    };
 
-    server.listen();
+    let mut input = String::new();
+
+    println!("press 1 to be a client, 2 to be a server");
+
+    io::stdin()
+        .read_line(&mut input) // Read a line into the mutable String
+        .expect("Failed to read line"); // Handle potential errors
+
+    if input.trim() == "1" {
+        let server = match server::server::Server::init_connection() {
+            None => {
+                panic!();
+            }
+            Some(res) => res,
+        };
+
+        server.listen();
+    } else if input.trim() == "2" {
+        let mut client = client::client::Client::new();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use core::panic;
+    use log::{info, warn};
+    use openssl::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
+    use simple_logger::SimpleLogger;
+    use std::io;
+    use std::net::TcpListener;
+    use std::net::TcpStream;
+    use std::sync::mpsc;
+    use std::sync::Arc;
+    use std::thread;
+
+    use crate::client::client::Client;
+    use crate::server;
+    use crate::server::server::Server;
+
+    #[test]
+    fn test_register() {
+        //init of the logger
+        SimpleLogger::new().init().unwrap();
+
+        //init of the sinchronization channel
+        let (tx, rx) = mpsc::channel();
+
+        //__________________________________________________________________________________CLIENT SIDE
+        let client_thread = thread::spawn(move || {
+            info!("the client spawned");
+
+            let _response: bool = rx.recv().unwrap();
+            let mut client = Client::new();
+            assert!(client
+                .register("pippo".to_string(), "baudo".to_string())
+                .is_ok())
+        });
+
+        //__________________________________________________________________________________SERVER SIDE
+        let server_thread = thread::spawn(move || {
+            info!("the server spawned");
+
+            let ready: bool = true;
+            let server = match Server::init_connection() {
+                Some(server) => server,
+                None => panic!(),
+            };
+            server.listen();
+
+            tx.send(ready).unwrap();
+        });
+    }
 }
 
 /*
