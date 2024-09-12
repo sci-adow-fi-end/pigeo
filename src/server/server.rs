@@ -1,8 +1,11 @@
+use crate::comunication::message_type::{Answer, Request};
 use crate::server::dao::DAO;
 use log::{info, warn};
-use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod};
+use openssl::aes::wrap_key;
+use openssl::error::Error;
+use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslStream};
 use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::thread;
 pub struct Server {
@@ -63,57 +66,201 @@ impl Server {
         })
     }
 
-    pub fn listen(self) {
-        for stream in self.connection_listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    let acceptor = self.conncetion_acceptor.clone();
+    pub fn handle_register(
+        &mut self,
+        username: String,
+        password: String,
+        public_key: String,
+    ) -> Answer {
+        let istaken = match self.server_dao.is_name_present(&username) {
+            Err(e) => return e.into_answer(),
+            Ok(val) => val,
+        };
 
-                    thread::spawn(move || {
-                        let mut stream = match acceptor.accept(stream) {
-                            Ok(res) => res,
-                            Err(_e) => {
-                                warn!("the request could not be accepted");
-                                panic!();
-                            }
-                        }; //FIXME add more info too the error
+        if istaken {
+            return Answer::BadName;
+        }
 
-                        let mut buffer = [0; 2048];
-                        let bytes_read = match stream.read(&mut buffer) {
-                            Ok(res) => res,
-                            Err(_e) => {
-                                warn!("message read failed");
-                                panic!();
-                            }
-                        };
+        match self.server_dao.save_user(&username, &password, &public_key) {
+            Err(e) => return e.into_answer(),
+            Ok(()) => return Answer::Ok,
+        }
+    }
 
-                        println!(
-                            "Ricevuti {} byte: {}",
-                            bytes_read,
-                            buffer
-                                .iter()
-                                .take(bytes_read)
-                                .map(|&n| n as char)
-                                .collect::<String>()
-                        );
+    pub fn handle_send(
+        &mut self,
+        username: &String,
+        password: &String,
+        receiver: &String,
+        message: &String,
+    ) -> Answer {
+        let valid_name = match self.server_dao.is_name_present(&username) {
+            Err(e) => return e.into_answer(),
+            Ok(val) => val,
+        };
 
-                        let response = b"message saved";
-                        stream.write_all(response).unwrap();
+        let valid_password = match self.server_dao.validate_credentials(&username, &password) {
+            Err(e) => return e.into_answer(),
+            Ok(val) => val,
+        };
 
-                        println!(
-                            "Risposta inviata: {}",
-                            buffer
-                                .iter()
-                                .take(bytes_read)
-                                .map(|&n| n as char)
-                                .collect::<String>()
-                        );
-                    });
-                }
-                Err(_e) => {
-                    warn!("error accepting the connection");
-                }
+        if !valid_name {
+            return Answer::BadName;
+        }
+
+        if !valid_password {
+            return Answer::BadPwd;
+        }
+
+        //TODO encrypt message
+
+        match self.server_dao.save_message(&message, &username, &receiver) {
+            Err(e) => return e.into_answer(),
+            Ok(()) => return Answer::Ok,
+        }
+    }
+
+    pub fn handle_receive(
+        &mut self,
+        username: &String,
+        password: &String,
+        sender: &String,
+    ) -> Answer {
+        let valid_name = match self.server_dao.is_name_present(&username) {
+            Err(e) => return e.into_answer(),
+            Ok(val) => val,
+        };
+
+        let valid_password = match self.server_dao.validate_credentials(&username, &password) {
+            Err(e) => return e.into_answer(),
+            Ok(val) => val,
+        };
+
+        if !valid_name {
+            return Answer::BadName;
+        }
+
+        if !valid_password {
+            return Answer::BadPwd;
+        }
+
+        //TODO encrypt message
+
+        match self
+            .server_dao
+            .get_messages_by_sender_receiver(sender, username)
+        {
+            Err(e) => return e.into_answer(),
+            Ok(messages) => return Answer::Messages(messages),
+        }
+    }
+
+    pub fn get_request(
+        stream: SslStream<TcpStream>,
+    ) -> Result<Request, Box<dyn std::error::Error>> {
+        let mut buffer = [0; 2048];
+        let bytes_read = match stream.read(&mut buffer) {
+            Ok(res) => res,
+            Err(e) => {
+                warn!("message read failed");
+                return Err(Box::new(e));
+            }
+        };
+
+        let request_string: String = String::from_utf8_lossy(&buffer[..bytes_read]);
+
+        return match Request::decode(&request_string) {
+            Ok(res) => Ok(res),
+            Err(e) => {
+                warn!("message decode failed");
+                Err(Box::new(e))
+            }
+        };
+    }
+
+    pub fn examine_request(&mut self, client_request: Request) -> Answer {
+        match client_request {
+            Request::Register {
+                username,
+                password,
+                public_key,
+            } => {
+                return self.handle_register(username, password, public_key);
+            }
+            Request::Send {
+                username,
+                password,
+                message,
+                receiver,
+            } => {
+                return self.handle_send(&username, &password, &receiver, &message);
+            }
+            Request::Receive {
+                username,
+                password,
+                sender,
+            } => {
+                return self.handle_receive(&username, &password, &sender);
             }
         }
     }
+
+    pub fn send_answer(
+        stream: &mut SslStream<TcpStream>,
+        answer: Answer,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let response = match answer.encode() {
+            Err(e) => {
+                warn!("failed to encode answer");
+                return Err(Box::new(e));
+            }
+            Ok(res) => res,
+        };
+
+        return match stream.write_all(response.as_bytes()) {
+            Err(e) => {
+                warn!("failed to encode answer");
+                Err(Box::new(e))
+            }
+            Ok(res) => Ok(res),
+        };
+    }
+
+    pub fn listen(&mut self) {
+        for stream in self.connection_listener.incoming() {
+            let acceptor = self.conncetion_acceptor.clone();
+
+            thread::spawn(move || {
+                let stream = match stream {
+                    Err(_e) => {
+                        warn!("error accepting the connection");
+                        panic!();
+                    }
+                    Ok(stream) => stream,
+                };
+
+                let mut accepted_stream = match acceptor.accept(stream) {
+                    Ok(res) => res,
+                    Err(_e) => {
+                        warn!("the request could not be accepted");
+                        panic!();
+                    }
+                };
+
+                let request = Self::get_request(&mut accepted_stream).unwrap();
+                let answer = self.examine_request(request);
+                Self::send_answer(&mut accepted_stream, answer).unwrap();
+            });
+        }
+    }
 }
+
+/*println!(
+    "Ricevuti {} byte: {}",
+    bytes_read,
+    buffer
+        .iter()
+        .take(bytes_read)
+        .map(|&n| n as char)
+        .collect::<String>()
+);*/

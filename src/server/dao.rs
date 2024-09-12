@@ -60,7 +60,7 @@ impl DAO {
         };
     }
 
-    pub fn is_name_present(&mut self, username: String) -> Result<bool, InvalidRequestError> {
+    pub fn is_name_present(&mut self, username: &String) -> Result<bool, InvalidRequestError> {
         match self.db_client.query(
             "SELECT username 
                     FROM users
@@ -75,11 +75,49 @@ impl DAO {
         }
     }
 
+    pub fn validate_credentials(
+        &mut self,
+        username: &String,
+        password: &String,
+    ) -> Result<bool, InvalidRequestError> {
+        match self.db_client.query(
+            "SELECT username, password 
+                    FROM users
+                    WHERE username = $1 AND password =$2",
+            &[&username, &password],
+        ) {
+            Ok(rows) => {
+                let available: bool = !rows.is_empty();
+                Ok(available)
+            }
+            Err(_e) => Err(InvalidRequestError::DatabaseError),
+        }
+    }
+
+    pub fn get_key_by_user(&mut self, username: &String) -> Result<String, InvalidRequestError> {
+        match self.db_client.query(
+            "SELECT pubkey 
+                    FROM users
+                    WHERE username = $1",
+            &[&username],
+        ) {
+            Ok(rows) => {
+                let keys: Vec<String> = rows.iter().map(|row| row.get("pubkey")).collect();
+                if keys.len() > 0 {
+                    return Ok(keys[0].clone());
+                } else {
+                    return Err(InvalidRequestError::BadUsername);
+                }
+            }
+            Err(_e) => Err(InvalidRequestError::DatabaseError),
+        }
+    }
+
     pub fn save_user(
         &mut self,
-        username: String,
-        password: String,
-        pubkey: String,
+        username: &String,
+        password: &String,
+        pubkey: &String,
     ) -> Result<(), InvalidRequestError> {
         match self.db_client.execute(
             "INSERT INTO users (username, password, pubkey) VALUES ($1, $2, $3)",
@@ -90,15 +128,11 @@ impl DAO {
         }
     }
 
-    fn validate_credentials(username: String, password: String) -> Result<(), InvalidRequestError> {
-        todo!()
-    }
-
     pub fn save_message(
         &mut self,
-        message: String,
-        sender: String,
-        receiver: String,
+        message: &String,
+        sender: &String,
+        receiver: &String,
     ) -> Result<(), InvalidRequestError> {
         match self.db_client.execute(
             "INSERT INTO messages (message, sender, receiver) VALUES ($1, $2, $3)",
@@ -111,8 +145,8 @@ impl DAO {
 
     pub fn get_messages_by_sender_receiver(
         &mut self,
-        sender: String,
-        receiver: String,
+        sender: &String,
+        receiver: &String,
     ) -> Result<Vec<String>, InvalidRequestError> {
         match self.db_client.query(
             "SELECT message 

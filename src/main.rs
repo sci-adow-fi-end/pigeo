@@ -16,7 +16,7 @@ fn main() {
         .expect("Failed to read line"); // Handle potential errors
 
     if input.trim() == "1" {
-        let server = match server::server::Server::init_connection() {
+        let mut server = match server::server::Server::init_connection() {
             None => {
                 panic!();
             }
@@ -71,7 +71,7 @@ mod tests {
             info!("the server spawned");
 
             let ready: bool = true;
-            let server = match Server::init_connection() {
+            let mut server = match Server::init_connection() {
                 Some(server) => server,
                 None => panic!(),
             };
@@ -79,6 +79,8 @@ mod tests {
 
             tx.send(ready).unwrap();
         });
+
+        assert!(client_thread.join().is_ok());
     }
 }
 
