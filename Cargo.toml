@@ -4,7 +4,9 @@ version = "0.1.1"
 edition = "2021"
 
 [dependencies]
-openssl = { version = "0.10.66", features = ["vendored"] }
+openssl = { version = "0.10.67", features = ["vendored"] }
+tokio = { version = "1.40.0", features = ["full"] }
+sqlx = { version = "0.8.2", features = ["postgres", "runtime-tokio-rustls"] }
 log = "0.4.22"
 simple_logger = "5.0.0"
 serde = { version = "1.0.210", features = ["derive"] }
