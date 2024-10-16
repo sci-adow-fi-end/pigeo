@@ -15,7 +15,7 @@ fn main() {
         .read_line(&mut input) // Read a line into the mutable String
         .expect("Failed to read line"); // Handle potential errors
 
-    if input.trim() == "1" {
+    if input.trim() == "2" {
         let mut server = match server::server::Server::init_connection() {
             None => {
                 panic!();
@@ -24,7 +24,7 @@ fn main() {
         };
 
         server.listen();
-    } else if input.trim() == "2" {
+    } else if input.trim() == "1" {
         let mut client = client::client::Client::new();
     }
 }

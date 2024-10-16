@@ -1,17 +1,15 @@
 use crate::comunication::message_type::{Answer, Request};
 use crate::server::dao::DAO;
-use log::{info, warn};
-use openssl::aes::wrap_key;
-use openssl::error::Error;
+use log::warn;
 use openssl::ssl::{SslAcceptor, SslFiletype, SslMethod, SslStream};
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 pub struct Server {
-    server_dao: DAO,
+    server_dao: Arc<Mutex<DAO>>,
     connection_listener: TcpListener,
-    conncetion_acceptor: Arc<SslAcceptor>,
+    connection_acceptor: Arc<SslAcceptor>,
 }
 impl Server {
     pub fn init_connection() -> Option<Self> {
@@ -60,19 +58,19 @@ impl Server {
         };
 
         Some(Server {
-            server_dao: dao,
+            server_dao: Arc::new(Mutex::new(dao)),
             connection_listener: listener,
-            conncetion_acceptor: acceptor,
+            connection_acceptor: acceptor,
         })
     }
 
     pub fn handle_register(
-        &mut self,
+        dao: &mut DAO,
         username: String,
         password: String,
         public_key: String,
     ) -> Answer {
-        let istaken = match self.server_dao.is_name_present(&username) {
+        let istaken = match dao.is_name_present(&username) {
             Err(e) => return e.into_answer(),
             Ok(val) => val,
         };
@@ -81,25 +79,25 @@ impl Server {
             return Answer::BadName;
         }
 
-        match self.server_dao.save_user(&username, &password, &public_key) {
-            Err(e) => return e.into_answer(),
-            Ok(()) => return Answer::Ok,
+        match dao.save_user(&username, &password, &public_key) {
+            Err(e) => e.into_answer(),
+            Ok(()) => Answer::Ok,
         }
     }
 
     pub fn handle_send(
-        &mut self,
+        dao: &mut DAO,
         username: &String,
         password: &String,
         receiver: &String,
         message: &String,
     ) -> Answer {
-        let valid_name = match self.server_dao.is_name_present(&username) {
+        let valid_name = match dao.is_name_present(&username) {
             Err(e) => return e.into_answer(),
             Ok(val) => val,
         };
 
-        let valid_password = match self.server_dao.validate_credentials(&username, &password) {
+        let valid_password = match dao.validate_credentials(&username, &password) {
             Err(e) => return e.into_answer(),
             Ok(val) => val,
         };
@@ -114,24 +112,24 @@ impl Server {
 
         //TODO encrypt message
 
-        match self.server_dao.save_message(&message, &username, &receiver) {
-            Err(e) => return e.into_answer(),
-            Ok(()) => return Answer::Ok,
+        match dao.save_message(&message, &username, &receiver) {
+            Err(e) => e.into_answer(),
+            Ok(()) => Answer::Ok,
         }
     }
 
     pub fn handle_receive(
-        &mut self,
+        dao: &mut DAO,
         username: &String,
         password: &String,
         sender: &String,
     ) -> Answer {
-        let valid_name = match self.server_dao.is_name_present(&username) {
+        let valid_name = match dao.is_name_present(&username) {
             Err(e) => return e.into_answer(),
             Ok(val) => val,
         };
 
-        let valid_password = match self.server_dao.validate_credentials(&username, &password) {
+        let valid_password = match dao.validate_credentials(&username, &password) {
             Err(e) => return e.into_answer(),
             Ok(val) => val,
         };
@@ -146,17 +144,14 @@ impl Server {
 
         //TODO encrypt message
 
-        match self
-            .server_dao
-            .get_messages_by_sender_receiver(sender, username)
-        {
-            Err(e) => return e.into_answer(),
-            Ok(messages) => return Answer::Messages(messages),
+        match dao.get_messages_by_sender_receiver(sender, username) {
+            Err(e) => e.into_answer(),
+            Ok(messages) => Answer::Messages(messages),
         }
     }
 
     pub fn get_request(
-        stream: SslStream<TcpStream>,
+        stream: &mut SslStream<TcpStream>,
     ) -> Result<Request, Box<dyn std::error::Error>> {
         let mut buffer = [0; 2048];
         let bytes_read = match stream.read(&mut buffer) {
@@ -167,41 +162,35 @@ impl Server {
             }
         };
 
-        let request_string: String = String::from_utf8_lossy(&buffer[..bytes_read]);
+        let request_string: String = String::from_utf8_lossy(&buffer[..bytes_read]).into_owned();
 
-        return match Request::decode(&request_string) {
+        match Request::decode(&request_string) {
             Ok(res) => Ok(res),
             Err(e) => {
                 warn!("message decode failed");
                 Err(Box::new(e))
             }
-        };
+        }
     }
 
-    pub fn examine_request(&mut self, client_request: Request) -> Answer {
+    pub fn examine_request(dao: &mut DAO, client_request: Request) -> Answer {
         match client_request {
             Request::Register {
                 username,
                 password,
                 public_key,
-            } => {
-                return self.handle_register(username, password, public_key);
-            }
+            } => Self::handle_register(dao, username, password, public_key),
             Request::Send {
                 username,
                 password,
                 message,
                 receiver,
-            } => {
-                return self.handle_send(&username, &password, &receiver, &message);
-            }
+            } => Self::handle_send(dao, &username, &password, &receiver, &message),
             Request::Receive {
                 username,
                 password,
                 sender,
-            } => {
-                return self.handle_receive(&username, &password, &sender);
-            }
+            } => Self::handle_receive(dao, &username, &password, &sender),
         }
     }
 
@@ -228,7 +217,8 @@ impl Server {
 
     pub fn listen(&mut self) {
         for stream in self.connection_listener.incoming() {
-            let acceptor = self.conncetion_acceptor.clone();
+            let acceptor = Arc::clone(&self.connection_acceptor);
+            let dao = Arc::clone(&self.server_dao);
 
             thread::spawn(move || {
                 let stream = match stream {
@@ -247,8 +237,16 @@ impl Server {
                     }
                 };
 
+                let mut dao = match dao.lock() {
+                    Ok(res) => res,
+                    Err(_e) => {
+                        warn!("the database connection could not be acquired");
+                        panic!();
+                    }
+                };
+
                 let request = Self::get_request(&mut accepted_stream).unwrap();
-                let answer = self.examine_request(request);
+                let answer = Self::examine_request(&mut dao, request);
                 Self::send_answer(&mut accepted_stream, answer).unwrap();
             });
         }

@@ -156,7 +156,7 @@ impl Client {
                     Some(bytes_read) => {
                         let response = String::from_utf8_lossy(&buffer[..bytes_read]);
 
-                        return match Answer::decode(&response) {
+                        match Answer::decode(&response) {
                             Err(_e) => {
                                 warn!("failed to decode the response");
                                 Err(RegistrationError::Unknown)
@@ -175,7 +175,7 @@ impl Client {
 
                                 Answer::ServerError => Err(RegistrationError::ServerError),
                             },
-                        };
+                        }
                     }
                 }
             }
